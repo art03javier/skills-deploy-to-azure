@@ -99,107 +99,34 @@ We won't be going into detail on the steps of this workflow, but it would be a g
 The full workflow file, should look like this:
 
 ```yaml
-name: Deploy to staging
+name: Deploy to Staging
 
 on:
-  pull_request:
-    types: [labeled]
-
-env:
-  IMAGE_REGISTRY_URL: ghcr.io
-  ###############################################
-  ### Replace <username> with GitHub username ###
-  ###############################################
-  DOCKER_IMAGE_NAME: <username>-azure-ttt
-  AZURE_WEBAPP_NAME: <username>-ttt-app
-  ###############################################
+  push:
+    branches:
+      - main
 
 jobs:
-  build:
-    if: contains(github.event.pull_request.labels.*.name, 'stage')
-
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16
-      - name: npm install and build webpack
-        run: |
-          npm install
-          npm run build
-      - uses: actions/upload-artifact@v3
-        with:
-          name: webpack artifacts
-          path: public/
+    - name: Checkout Repository
+      uses: actions/checkout@v2
 
-  Build-Docker-Image:
-    runs-on: ubuntu-latest
-    needs: build
-    name: Build image and store in GitHub Container Registry
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Set Up Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: '14'
 
-      - name: Download built artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: webpack artifacts
-          path: public
+    - name: Install Dependencies
+      run: npm install
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.IMAGE_REGISTRY_URL }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    # Add your new actions here
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}
-          tags: |
-            type=sha,format=long,prefix=
+    - name: Deploy to Staging
+      run: ./deploy-script.sh
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  Deploy-to-Azure:
-    runs-on: ubuntu-latest
-    needs: Build-Docker-Image
-    name: Deploy app container to Azure
-    steps:
-      - name: "Login via Azure CLI"
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - uses: azure/docker-login@v1
-        with:
-          login-server: ${{env.IMAGE_REGISTRY_URL}}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Deploy web app container
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: ${{env.AZURE_WEBAPP_NAME}}
-          images: ${{env.IMAGE_REGISTRY_URL}}/${{ github.repository }}/${{env.DOCKER_IMAGE_NAME}}:${{ github.sha }}
-
-      - name: Azure logout via Azure CLI
-        uses: azure/CLI@v1
-        with:
-          inlineScript: |
-            az logout
-            az cache purge
-            az account clear
 ```
 
 16. After you've edited the file, click **Commit changes...** and commit to the `staging-workflow` branch.
